@@ -32,7 +32,7 @@
 
         .research-pill { background: #f1f5f9; border-radius: 1.25rem; padding: 1.5rem; border: 1px solid #e2e8f0; height: 100%; }
         
-        /* HARD OVERWRITES FOR CONTRAST */
+        /* HARD OVERWRITES FOR CONTRAST - Pure White */
         #rv-header { color: #ffffff !important; font-weight: 900; }
         #rv-stats { color: #ffffff !important; font-weight: 900; }
         #rv-protocol-label { color: #ffffff !important; font-weight: 900; }
@@ -106,7 +106,8 @@
                 ArrowLeft: <svg className={`w-4 h-4 ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>,
                 Send: <svg className={`w-3 h-3 ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
                 Info: <svg className={`w-4 h-4 ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
-                Zap: <svg className={`w-6 h-6 ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                Zap: <svg className={`w-6 h-6 ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+                Loader: <svg className={`w-4 h-4 animate-spin ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
             };
             return icons[name] || null;
         };
@@ -127,7 +128,7 @@
                 fetchWeather();
             }, [coords]);
 
-            if (loading) return <div className="p-4 bg-white/60 backdrop-blur rounded-2xl border border-slate-100 flex items-center justify-center animate-pulse"><p className="text-[10px] font-black uppercase text-slate-400 font-bold">Syncing Atmospheric Data...</p></div>;
+            if (loading) return <div className="p-4 bg-white/60 backdrop-blur rounded-2xl border border-slate-100 flex items-center justify-center animate-pulse"><p className="text-[10px] font-black uppercase text-slate-400 font-bold tracking-widest">Syncing Atmospheric Data...</p></div>;
             if (!weather) return null;
 
             return (
@@ -145,6 +146,7 @@
         const LogStream = ({ dayNum, activeUser, db, user, onUserToggle }) => {
             const [entries, setEntries] = useState([]);
             const [input, setInput] = useState("");
+            const [posting, setPosting] = useState(false);
 
             useEffect(() => {
                 if (!db || !user) return;
@@ -152,20 +154,27 @@
                 const unsubscribe = onSnapshot(docRef, (docSnap) => {
                     const data = docSnap.exists() ? docSnap.data().entries : [];
                     setEntries([...data].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
-                });
+                }, (err) => console.error("Firestore Listen Error:", err));
                 return () => unsubscribe();
             }, [dayNum, db, user]);
 
             const postEntry = async () => {
-                if (!input.trim() || !db || !user) return;
-                const entry = { user: activeUser, text: input.trim(), timestamp: new Date().toISOString(), id: crypto.randomUUID() };
+                if (!input.trim() || !db || !user || posting) return;
+                setPosting(true);
+                const entry = { 
+                    user: activeUser, 
+                    text: input.trim(), 
+                    timestamp: new Date().toISOString(), 
+                    id: crypto.randomUUID() 
+                };
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'day_logs', `day_${dayNum}`);
                 try {
                     const docSnap = await getDoc(docRef);
                     if (docSnap.exists()) await updateDoc(docRef, { entries: arrayUnion(entry) });
                     else await setDoc(docRef, { entries: [entry] });
                     setInput("");
-                } catch (e) { console.error(e); }
+                } catch (e) { console.error("Post error:", e); }
+                setPosting(false);
             };
 
             return (
@@ -198,8 +207,13 @@
                     </div>
                     <div className="mt-4 pt-6 border-t border-slate-200 space-y-3">
                         <textarea value={input} onChange={e => setInput(e.target.value)} placeholder={`Log as ${activeUser}...`} className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none h-24 shadow-sm" />
-                        <button onClick={postEntry} className="w-full bg-emerald-800 text-white font-black py-4 rounded-2xl text-[11px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md flex items-center justify-center gap-2">
-                            <Icon name="Send" /> POST LOG
+                        <button 
+                            disabled={!user || posting}
+                            onClick={postEntry} 
+                            className={`w-full font-black py-4 rounded-2xl text-[11px] uppercase tracking-widest shadow-md flex items-center justify-center gap-2 transition-all ${(!user || posting) ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-emerald-800 text-white hover:bg-emerald-700'}`}
+                        >
+                            {posting ? <Icon name="Loader" /> : <Icon name="Send" />}
+                            {!user ? "CONNECTING..." : posting ? "POSTING..." : "POST LOG"}
                         </button>
                     </div>
                 </div>
@@ -250,19 +264,19 @@
                         <div onClick={() => setView('home')} className="flex items-center gap-3 cursor-pointer group">
                             <div className="w-10 h-10 bg-emerald-800 rounded-xl text-white flex items-center justify-center font-bold shadow-lg group-hover:rotate-3 transition-transform">☘️</div>
                             <span className="text-xl font-black tracking-tight text-slate-900 hidden sm:inline tracking-tighter">Cliffs, Craic <span className="text-emerald-600">& Carbs</span></span>
-                            <span className="text-xl font-black tracking-tight text-emerald-600 sm:hidden uppercase">CCC</span>
+                            <span className="text-xl font-black tracking-tight text-emerald-600 sm:hidden uppercase tracking-widest font-black">CCC</span>
                         </div>
                         <div className="flex gap-4 items-center">
                             <div className="hidden md:flex gap-1.5 bg-slate-100 p-1 rounded-full border border-slate-200">
                                 {["Kevin", "Justin", "Jiwon"].map(u => (
-                                    <button key={u} onClick={() => changeUser(u)} className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${activeUser === u ? 'bg-emerald-800 text-white shadow-sm font-bold' : 'text-slate-400 hover:text-slate-600'}`}>
+                                    <button key={u} onClick={() => changeUser(u)} className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${activeUser === u ? 'bg-emerald-800 text-white shadow-sm font-black' : 'text-slate-400 hover:text-slate-600'}`}>
                                         {u}
                                     </button>
                                 ))}
                             </div>
                             <div className="flex gap-6 text-[11px] font-black uppercase tracking-widest text-slate-500">
-                                <button onClick={() => setView('overview')} className="hover:text-emerald-700 transition-colors font-bold">Strategy</button>
-                                <button onClick={() => setView('itinerary')} className="hover:text-emerald-700 transition-colors font-bold">Daily Logs</button>
+                                <button onClick={() => setView('overview')} className="hover:text-emerald-700 transition-colors font-black">Strategy</button>
+                                <button onClick={() => setView('itinerary')} className="hover:text-emerald-700 transition-colors font-black">Daily Logs</button>
                             </div>
                         </div>
                     </nav>
@@ -310,12 +324,12 @@
                                     <div className="lg:col-span-8 space-y-12">
                                         <section>
                                           <h3>Ireland: Identity & The People</h3>
-                                          <p>Modern Ireland is a land of profound dualities. Known globally for its contributions to literature (Joyce, Yeats, Heaney) and its world-class whiskey and brewing traditions, its true character lies in the concept of <strong>"The Craic"</strong>—a unique blend of hospitality, witty conversation, and shared entertainment. The Irish people are master storytellers, possessed of a laid-back resilience that values community over rigid structures.</p>
+                                          <p>Modern Ireland is a land of profound dualities. Known globally for its contributions to literature (Joyce, Yeats, Heaney) and its world-class whiskey and brewing traditions, its true character lies in the concept of <strong>"The Craic"</strong>—a unique blend of hospitality, witty conversation, and shared entertainment. The Irish people are renowned masters of storytelling, possessed of a laid-back resilience that values community over rigid structures.</p>
                                         </section>
 
                                         <section>
                                           <h3>Cultural Experiences & Gastronomy</h3>
-                                          <p>To truly engage with the island, prioritize the local "nodes" of culture. Evening **Trad Sessions** in rural pubs (Dingle/Galway), witnessing a high-speed **Hurling match**, and visiting the **Gaeltacht areas** where Gaeilge is the daily tongue. Culinary highlights for this trip include:</p>
+                                          <p>To truly engage with the island, prioritize the local "nodes" of culture. Evening **Trad Sessions** in rural pubs (Dingle/Galway), witnessing a high-speed **Hurling match**, and visiting the **Gaeltacht areas** where Gaeilge (Irish) is the daily tongue. Culinary highlights for this trip include:</p>
                                           <ul className="list-disc pl-6 space-y-4 text-slate-600 font-medium font-bold">
                                             <li><strong>Spiced Beef:</strong> A rare Cork delicacy from the English Market.</li>
                                             <li><strong>Boxty & Colcannon:</strong> Traditional potato-based dishes that define regional identity.</li>
@@ -354,11 +368,11 @@
                                     {/* RESILIENCE VITALS (IDS & WHITE TEXT FIXED) */}
                                     <div className="lg:col-span-4 space-y-8">
                                         <div id="vitalinfo" className="bg-slate-900 p-12 rounded-[3.5rem] shadow-2xl space-y-12 border border-slate-800 text-white">
-                                            <h3 id="rv-header" className="text-3xl font-black border-none p-0 m-0 tracking-tight leading-none text-white">Resilience Vitals</h3>
+                                            <h3 id="rv-header" className="text-3xl font-black border-none p-0 m-0 tracking-tight leading-none text-white font-bold">Resilience Vitals</h3>
                                             <div className="space-y-10 text-white">
                                                 <div className="flex gap-6 items-center">
                                                   <div className="w-16 h-16 bg-emerald-800 rounded-3xl flex items-center justify-center shrink-0 shadow-lg text-white border border-emerald-700 font-bold">
-                                                    <Icon name="Wind" className="w-8 h-8 text-emerald-400" />
+                                                    <Icon name="Wind" className="w-8 h-8 text-emerald-400 font-bold" />
                                                   </div>
                                                   <div>
                                                     <h5 className="text-[12px] font-black uppercase text-emerald-400 mb-2 tracking-[0.2em] leading-none font-bold">Safety Threshold</h5>
@@ -370,29 +384,18 @@
                                                     <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-black uppercase tracking-widest text-white">
                                                         <div className="space-y-4">
                                                             <div className="w-12 h-12 bg-emerald-600 rounded-full mx-auto flex items-center justify-center border-2 border-emerald-400 shadow-2xl text-xl text-white font-black">1</div>
-                                                            <span className="text-white font-bold uppercase">Base</span>
+                                                            <span className="text-white font-black uppercase">Base</span>
                                                         </div>
                                                         <div className="space-y-4">
                                                             <div className="w-12 h-12 bg-emerald-600 rounded-full mx-auto flex items-center justify-center border-2 border-emerald-400 shadow-2xl text-xl text-white font-black">2</div>
-                                                            <span className="text-white font-bold uppercase">Mid</span>
+                                                            <span className="text-white font-black uppercase">Mid</span>
                                                         </div>
                                                         <div className="space-y-4">
                                                             <div className="w-12 h-12 bg-emerald-600 rounded-full mx-auto flex items-center justify-center border-2 border-emerald-400 shadow-2xl text-xl text-white font-black">3</div>
-                                                            <span className="text-white font-bold uppercase">Shell</span>
+                                                            <span className="text-white font-black uppercase">Shell</span>
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                        <div className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm space-y-4">
-                                            <h4 className="font-black text-slate-900 uppercase text-[10px] tracking-widest border-b pb-4 flex items-center gap-3 tracking-tighter leading-none font-bold">
-                                                <Icon name="Info" className="text-emerald-600" /> Phased Overview
-                                            </h4>
-                                            <div className="space-y-3 text-[11px] font-bold text-slate-500 uppercase tracking-wide leading-relaxed">
-                                              <p><span className="text-emerald-600 font-bold">I.</span> South-East & Cork City</p>
-                                              <p><span className="text-emerald-600 font-bold">II.</span> Wild Atlantic Frontier</p>
-                                              <p><span className="text-emerald-600 font-bold">III.</span> Karst & Cliffs Dash</p>
-                                              <p><span className="text-emerald-600 font-bold">IV.</span> National Festival Hub</p>
                                             </div>
                                         </div>
                                     </div>
@@ -453,8 +456,8 @@
                                         </div>
 
                                         <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                            <div className="research-pill"><h5 className="text-[10px] font-black uppercase text-emerald-600 mb-2 leading-none font-bold">Cool Shop</h5><h6 className="font-bold text-slate-900 text-xl tracking-tight mb-2 leading-tight">{ITINERARY_DATA[selectedDay].hiddenShop}</h6><p className="text-sm text-slate-500 font-bold font-bold leading-relaxed">{ITINERARY_DATA[selectedDay].shopDesc}</p></div>
-                                            <div className="research-pill"><h5 className="text-[10px] font-black uppercase text-emerald-600 mb-2 leading-none font-bold">Heritage</h5><h6 className="font-bold text-slate-900 text-xl tracking-tight mb-2 leading-tight">{ITINERARY_DATA[selectedDay].hiddenBuilding}</h6><p className="text-sm text-slate-500 font-bold font-bold leading-relaxed">{ITINERARY_DATA[selectedDay].buildingDesc}</p></div>
+                                            <div className="research-pill"><h5 className="text-[10px] font-black uppercase text-emerald-600 mb-2 leading-none font-bold font-bold">Cool Shop</h5><h6 className="font-bold text-slate-900 text-xl tracking-tight mb-2 leading-tight">{ITINERARY_DATA[selectedDay].hiddenShop}</h6><p className="text-sm text-slate-500 font-bold font-bold leading-relaxed">{ITINERARY_DATA[selectedDay].shopDesc}</p></div>
+                                            <div className="research-pill"><h5 className="text-[10px] font-black uppercase text-emerald-600 mb-2 leading-none font-bold font-bold">Heritage</h5><h6 className="font-bold text-slate-900 text-xl tracking-tight mb-2 leading-tight">{ITINERARY_DATA[selectedDay].hiddenBuilding}</h6><p className="text-sm text-slate-500 font-bold font-bold leading-relaxed">{ITINERARY_DATA[selectedDay].buildingDesc}</p></div>
                                         </section>
 
                                         <section className="bg-emerald-900 text-white p-12 rounded-[4rem] shadow-2xl relative overflow-hidden">
@@ -470,7 +473,7 @@
                                     </div>
                                     <div className="space-y-8 font-black font-black">
                                         <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4 font-bold">
-                                            <h4 className="font-black text-slate-900 uppercase text-[10px] tracking-widest border-b pb-4 flex items-center gap-3 tracking-tighter font-bold"><Icon name="Info" className="text-emerald-600 font-bold" /> Expedition Brief</h4>
+                                            <h4 className="font-black text-slate-900 uppercase text-[10px] tracking-widest border-b pb-4 flex items-center gap-3 tracking-tighter leading-none font-bold"><Icon name="Info" className="text-emerald-600 font-bold" /> Expedition Brief</h4>
                                             <p className="text-[10px] text-slate-400 font-black uppercase tracking-tighter mb-1 leading-none font-bold">Est. Daily Budget</p>
                                             <p className="text-xl font-black text-slate-900 tracking-tight leading-none italic font-bold">{ITINERARY_DATA[selectedDay].cost}</p>
                                         </div>
