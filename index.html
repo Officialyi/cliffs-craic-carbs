@@ -36,6 +36,7 @@
         #rv-header { color: #ffffff !important; font-weight: 900; }
         #rv-stats { color: #ffffff !important; font-weight: 900; }
         #rv-protocol-label { color: #ffffff !important; font-weight: 900; }
+        .rv-item-label { color: #ffffff !important; font-weight: 700; }
         
         .fade-in { animation: fadeIn 0.4s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -71,9 +72,10 @@
 
         const configRaw = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : '{}';
         const envFirebaseConfig = typeof configRaw === 'string' ? JSON.parse(configRaw) : configRaw;
-        
         const firebaseConfig = envFirebaseConfig.apiKey ? envFirebaseConfig : personalFirebaseConfig;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'cliffs-craic-carbs-vfinal';
+        
+        // --- FIXED: Define initialToken to prevent ReferenceError ---
         const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         let db, auth;
@@ -106,8 +108,7 @@
                 ArrowLeft: <svg className={`w-4 h-4 ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>,
                 Send: <svg className={`w-3 h-3 ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
                 Info: <svg className={`w-4 h-4 ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
-                Zap: <svg className={`w-6 h-6 ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
-                Loader: <svg className={`w-4 h-4 animate-spin ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                Zap: <svg className={`w-6 h-6 ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             };
             return icons[name] || null;
         };
@@ -146,7 +147,6 @@
         const LogStream = ({ dayNum, activeUser, db, user, onUserToggle }) => {
             const [entries, setEntries] = useState([]);
             const [input, setInput] = useState("");
-            const [posting, setPosting] = useState(false);
 
             useEffect(() => {
                 if (!db || !user) return;
@@ -154,33 +154,26 @@
                 const unsubscribe = onSnapshot(docRef, (docSnap) => {
                     const data = docSnap.exists() ? docSnap.data().entries : [];
                     setEntries([...data].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
-                }, (err) => console.error("Firestore Listen Error:", err));
+                });
                 return () => unsubscribe();
             }, [dayNum, db, user]);
 
             const postEntry = async () => {
-                if (!input.trim() || !db || !user || posting) return;
-                setPosting(true);
-                const entry = { 
-                    user: activeUser, 
-                    text: input.trim(), 
-                    timestamp: new Date().toISOString(), 
-                    id: crypto.randomUUID() 
-                };
+                if (!input.trim() || !db || !user) return;
+                const entry = { user: activeUser, text: input.trim(), timestamp: new Date().toISOString(), id: crypto.randomUUID() };
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'day_logs', `day_${dayNum}`);
                 try {
                     const docSnap = await getDoc(docRef);
                     if (docSnap.exists()) await updateDoc(docRef, { entries: arrayUnion(entry) });
                     else await setDoc(docRef, { entries: [entry] });
                     setInput("");
-                } catch (e) { console.error("Post error:", e); }
-                setPosting(false);
+                } catch (e) { console.error(e); }
             };
 
             return (
-                <div className="bg-slate-100 p-8 rounded-[3rem] flex flex-col h-[600px] border border-slate-200 shadow-inner mt-8 lg:mt-0">
+                <div className="bg-slate-100 p-8 rounded-[3rem] flex flex-col h-[600px] border border-slate-200 shadow-inner mt-8 lg:mt-0 text-slate-900">
                     <div className="flex justify-between items-center mb-6">
-                        <h4 className="font-black text-slate-900 text-xs uppercase tracking-widest leading-none text-slate-950 font-bold">Trio Log Stream</h4>
+                        <h4 className="font-black text-xs uppercase tracking-widest leading-none font-bold">Trio Log Stream</h4>
                         <div className="flex gap-1.5">
                             {["Kevin", "Justin", "Jiwon"].map(u => (
                                 <button key={u} onClick={() => onUserToggle(u)} className={`w-9 h-9 rounded-full text-[11px] font-black uppercase transition-all border ${activeUser === u ? 'bg-emerald-800 text-white border-emerald-800 shadow-md scale-110' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}>
@@ -191,7 +184,7 @@
                     </div>
                     <div className="flex-grow overflow-y-auto space-y-4 pr-1 no-scrollbar">
                         {entries.length === 0 ? (
-                            <p className="text-center py-12 text-xs text-slate-400 italic">No notes yet. Be the first to post, {activeUser}!</p>
+                            <p className="text-center py-12 text-xs text-slate-400 italic">No notes yet. Be the first, {activeUser}!</p>
                         ) : entries.map(e => (
                             <div key={e.id} className="flex gap-4 items-start fade-in">
                                 <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-xs text-white shadow-sm ${e.user === 'Justin' ? 'bg-blue-500' : e.user === 'Jiwon' ? 'bg-purple-500' : 'bg-emerald-800'}`}>{e.user[0]}</div>
@@ -207,13 +200,8 @@
                     </div>
                     <div className="mt-4 pt-6 border-t border-slate-200 space-y-3">
                         <textarea value={input} onChange={e => setInput(e.target.value)} placeholder={`Log as ${activeUser}...`} className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none h-24 shadow-sm" />
-                        <button 
-                            disabled={!user || posting}
-                            onClick={postEntry} 
-                            className={`w-full font-black py-4 rounded-2xl text-[11px] uppercase tracking-widest shadow-md flex items-center justify-center gap-2 transition-all ${(!user || posting) ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-emerald-800 text-white hover:bg-emerald-700'}`}
-                        >
-                            {posting ? <Icon name="Loader" /> : <Icon name="Send" />}
-                            {!user ? "CONNECTING..." : posting ? "POSTING..." : "POST LOG"}
+                        <button onClick={postEntry} className="w-full bg-emerald-800 text-white font-black py-4 rounded-2xl text-[11px] uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md flex items-center justify-center gap-2">
+                            <Icon name="Send" /> POST LOG
                         </button>
                     </div>
                 </div>
@@ -233,7 +221,7 @@
                         try {
                             if (initialToken) await signInWithCustomToken(auth, initialToken);
                             else await signInAnonymously(auth);
-                        } catch (err) { console.error("Auth Error:", err); }
+                        } catch (err) { console.error("Firebase Authentication Handshake Error:", err); }
                     };
                     initAuth().then(() => onAuthStateChanged(auth, setUser));
                 }
@@ -264,7 +252,7 @@
                         <div onClick={() => setView('home')} className="flex items-center gap-3 cursor-pointer group">
                             <div className="w-10 h-10 bg-emerald-800 rounded-xl text-white flex items-center justify-center font-bold shadow-lg group-hover:rotate-3 transition-transform">☘️</div>
                             <span className="text-xl font-black tracking-tight text-slate-900 hidden sm:inline tracking-tighter">Cliffs, Craic <span className="text-emerald-600">& Carbs</span></span>
-                            <span className="text-xl font-black tracking-tight text-emerald-600 sm:hidden uppercase tracking-widest font-black">CCC</span>
+                            <span className="text-xl font-black tracking-tight text-emerald-600 sm:hidden uppercase tracking-widest font-bold">CCC</span>
                         </div>
                         <div className="flex gap-4 items-center">
                             <div className="hidden md:flex gap-1.5 bg-slate-100 p-1 rounded-full border border-slate-200">
@@ -275,8 +263,8 @@
                                 ))}
                             </div>
                             <div className="flex gap-6 text-[11px] font-black uppercase tracking-widest text-slate-500">
-                                <button onClick={() => setView('overview')} className="hover:text-emerald-700 transition-colors font-black">Strategy</button>
-                                <button onClick={() => setView('itinerary')} className="hover:text-emerald-700 transition-colors font-black">Daily Logs</button>
+                                <button onClick={() => setView('overview')} className="hover:text-emerald-700 transition-colors font-bold">Strategy</button>
+                                <button onClick={() => setView('itinerary')} className="hover:text-emerald-700 transition-colors font-bold">Daily Logs</button>
                             </div>
                         </div>
                     </nav>
@@ -315,72 +303,69 @@
 
                         {/* VIEW: STRATEGIC ANALYSIS */}
                         {view === 'overview' && (
-                            <div className="fade-in space-y-12 pb-24 prose-analysis">
+                            <div className="fade-in space-y-12 pb-24 prose-analysis text-slate-900">
                                 <header className="border-b border-slate-200 pb-10">
-                                    <h2 className="text-4xl md:text-6xl font-black text-slate-900 italic serif leading-tight tracking-tight">Strategic Framework & Analysis</h2>
-                                    <p className="text-emerald-700 font-black uppercase tracking-[0.2em] text-[11px] mt-4 leading-relaxed max-w-2xl font-black">Analysis and 10-Day Expeditionary Framework for the 2026 St. Patrick’s Circuit</p>
+                                    <h2 className="text-4xl md:text-6xl font-black italic serif leading-tight tracking-tight">Strategic Framework & Analysis</h2>
+                                    <p className="text-emerald-700 font-black uppercase tracking-[0.2em] text-[11px] mt-4 leading-relaxed max-w-2xl font-bold">Analysis and 10-Day Expeditionary Framework for the 2026 St. Patrick’s Circuit</p>
                                 </header>
                                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
                                     <div className="lg:col-span-8 space-y-12">
                                         <section>
                                           <h3>Ireland: Identity & The People</h3>
-                                          <p>Modern Ireland is a land of profound dualities. Known globally for its contributions to literature (Joyce, Yeats, Heaney) and its world-class whiskey and brewing traditions, its true character lies in the concept of <strong>"The Craic"</strong>—a unique blend of hospitality, witty conversation, and shared entertainment. The Irish people are renowned masters of storytelling, possessed of a laid-back resilience that values community over rigid structures.</p>
+                                          <p>Modern Ireland is a land of profound dualities. Known globally for its whiskey and brewing traditions, its true character lies in <strong>"The Craic"</strong>—a unique blend of hospitality, witty conversation, and shared entertainment. The Irish people are master storytellers, possessed of a laid-back resilience that values community over rigid structures.</p>
                                         </section>
 
                                         <section>
                                           <h3>Cultural Experiences & Gastronomy</h3>
-                                          <p>To truly engage with the island, prioritize the local "nodes" of culture. Evening **Trad Sessions** in rural pubs (Dingle/Galway), witnessing a high-speed **Hurling match**, and visiting the **Gaeltacht areas** where Gaeilge (Irish) is the daily tongue. Culinary highlights for this trip include:</p>
+                                          <p>To truly engage with the island, prioritize local nodes of culture. evening Trad Sessions in rural pubs, witnessing a high-speed Hurling match, and visiting the Gaeltacht areas. Culinary highlights include:</p>
                                           <ul className="list-disc pl-6 space-y-4 text-slate-600 font-medium font-bold">
                                             <li><strong>Spiced Beef:</strong> A rare Cork delicacy from the English Market.</li>
-                                            <li><strong>Boxty & Colcannon:</strong> Traditional potato-based dishes that define regional identity.</li>
+                                            <li><strong>Boxty & Colcannon:</strong> Traditional potato-based regional dishes.</li>
                                             <li><strong>Catch-to-Table Seafood:</strong> Focus on Dingle bay lobster and Clarenbridge oysters.</li>
-                                            <li><strong>Artisan Soda Bread:</strong> A staple found in every high-end roastery or farm-to-fork cafe.</li>
                                           </ul>
                                         </section>
 
                                         <section>
                                           <h3>Linguistic Protocol: Common Phrases</h3>
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="p-5 bg-white border rounded-2xl shadow-sm italic text-sm font-bold">"What's the Craic?" (How's it going? / What's the news?)</div>
-                                            <div className="p-5 bg-white border rounded-2xl shadow-sm italic text-sm font-bold">"Sláinte" (Cheers / Good Health - Essential for the pub)</div>
-                                            <div className="p-5 bg-white border rounded-2xl shadow-sm italic text-sm font-bold">"Grand" (The most versatile word: Fine / Great / Okay)</div>
+                                            <div className="p-5 bg-white border rounded-2xl shadow-sm italic text-sm font-bold">"What's the Craic?" (How's it going?)</div>
+                                            <div className="p-5 bg-white border rounded-2xl shadow-sm italic text-sm font-bold">"Sláinte" (Cheers / Good Health)</div>
+                                            <div className="p-5 bg-white border rounded-2xl shadow-sm italic text-sm font-bold">"Grand" (VERSATILE: Fine / Okay / Great)</div>
                                             <div className="p-5 bg-white border rounded-2xl shadow-sm italic text-sm font-bold">"Deadly" (Excellent / Brilliant)</div>
                                           </div>
                                         </section>
 
                                         <section>
                                           <h3>Rules of the Road: Tactical Driving</h3>
-                                          <p>Driving in Ireland, particularly on the Wild Atlantic Way, requires specific tactical awareness:</p>
                                           <ul className="list-disc pl-6 space-y-4 text-slate-600 font-medium font-bold italic">
-                                            <li><strong>Left-Hand Operation:</strong> All movement occurs on the left. Yield to the right at all roundabouts.</li>
-                                            <li><strong>Boreens:</strong> Extremely narrow rural roads. Be prepared to reverse to a passing place.</li>
+                                            <li><strong>Left-Hand Operation:</strong> All movement occurs on the left.</li>
+                                            <li><strong>Boreens:</strong> Extremely narrow rural roads; be prepared to reverse.</li>
                                             <li><strong>Livestock Right-of-Way:</strong> Sheep and cattle always possess the right of way.</li>
-                                            <li><strong>Zero Tolerance:</strong> Strict drink-driving laws; avoid consumption if operating a vehicle.</li>
                                           </ul>
                                         </section>
 
                                         <section>
                                           <h3>National Festival Infrastructure (Mar 14-17)</h3>
-                                          <p>The 2026 circuit culminates at the **Festival Quarter (Collins Barracks)** and **Guinness Storehouse (Taste Mór)**. Note: Tara Street Station will be closed until 16:00 on March 17 for the National Parade.</p>
+                                          <p>The 2026 circuit culminates at the Festival Quarter (Collins Barracks) and Guinness Storehouse (Taste Mór). Note: Tara Street Station will be closed until 16:00 on March 17.</p>
                                         </section>
                                     </div>
 
                                     {/* RESILIENCE VITALS (IDS & WHITE TEXT FIXED) */}
                                     <div className="lg:col-span-4 space-y-8">
                                         <div id="vitalinfo" className="bg-slate-900 p-12 rounded-[3.5rem] shadow-2xl space-y-12 border border-slate-800 text-white">
-                                            <h3 id="rv-header" className="text-3xl font-black border-none p-0 m-0 tracking-tight leading-none text-white font-bold">Resilience Vitals</h3>
-                                            <div className="space-y-10 text-white">
+                                            <h3 id="rv-header" className="text-3xl font-black border-none p-0 m-0 tracking-tight leading-none text-white">Resilience Vitals</h3>
+                                            <div className="space-y-10 text-white font-bold">
                                                 <div className="flex gap-6 items-center">
-                                                  <div className="w-16 h-16 bg-emerald-800 rounded-3xl flex items-center justify-center shrink-0 shadow-lg text-white border border-emerald-700 font-bold">
-                                                    <Icon name="Wind" className="w-8 h-8 text-emerald-400 font-bold" />
+                                                  <div className="w-16 h-16 bg-emerald-800 rounded-3xl flex items-center justify-center shrink-0 shadow-lg text-white border border-emerald-700">
+                                                    <Icon name="Wind" className="w-8 h-8 text-emerald-400" />
                                                   </div>
                                                   <div>
-                                                    <h5 className="text-[12px] font-black uppercase text-emerald-400 mb-2 tracking-[0.2em] leading-none font-bold">Safety Threshold</h5>
+                                                    <h5 className="text-[12px] font-black uppercase text-emerald-400 mb-2 tracking-[0.2em] leading-none font-black">Safety Threshold</h5>
                                                     <p id="rv-stats" className="text-xl text-white font-black italic tracking-tight leading-none">60 mph peak ridges</p>
                                                   </div>
                                                 </div>
                                                 <div className="pt-10 border-t border-slate-800">
-                                                    <h5 id="rv-protocol-label" className="text-[11px] font-black uppercase text-emerald-400 text-center mb-10 tracking-[0.3em] font-bold">3-Layer Gear Protocol</h5>
+                                                    <h5 id="rv-protocol-label" className="text-[11px] font-black uppercase text-emerald-400 text-center mb-10 tracking-[0.3em] font-black">3-Layer Gear Protocol</h5>
                                                     <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-black uppercase tracking-widest text-white">
                                                         <div className="space-y-4">
                                                             <div className="w-12 h-12 bg-emerald-600 rounded-full mx-auto flex items-center justify-center border-2 border-emerald-400 shadow-2xl text-xl text-white font-black">1</div>
@@ -388,11 +373,11 @@
                                                         </div>
                                                         <div className="space-y-4">
                                                             <div className="w-12 h-12 bg-emerald-600 rounded-full mx-auto flex items-center justify-center border-2 border-emerald-400 shadow-2xl text-xl text-white font-black">2</div>
-                                                            <span className="text-white font-black uppercase">Mid</span>
+                                                            <span className="text-white font-bold uppercase">Mid</span>
                                                         </div>
                                                         <div className="space-y-4">
                                                             <div className="w-12 h-12 bg-emerald-600 rounded-full mx-auto flex items-center justify-center border-2 border-emerald-400 shadow-2xl text-xl text-white font-black">3</div>
-                                                            <span className="text-white font-black uppercase">Shell</span>
+                                                            <span className="text-white font-bold uppercase">Shell</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -412,11 +397,11 @@
                                         <div key={i} onClick={() => { setSelectedDay(i); setView('day-detail'); }} className="blog-card bg-white rounded-[3rem] overflow-hidden shadow-sm border border-slate-100">
                                             <div className="h-60 relative overflow-hidden">
                                                 <img src={d.img} alt={d.city} className="w-full h-full object-cover transition-transform duration-700 hover:scale-105" />
-                                                <div className="absolute top-6 left-6 bg-white/90 backdrop-blur px-4 py-2 rounded-full text-[10px] font-black tracking-widest uppercase shadow-sm font-bold font-bold">Day {d.day}</div>
+                                                <div className="absolute top-6 left-6 bg-white/90 backdrop-blur px-4 py-2 rounded-full text-[10px] font-black tracking-widest uppercase shadow-sm font-bold">Day {d.day}</div>
                                             </div>
                                             <div className="p-8">
                                                 <h3 className="text-2xl font-bold text-slate-900 leading-tight mb-2 tracking-tight">{d.title}</h3>
-                                                <div className="flex items-center gap-2 text-[10px] text-emerald-600 font-black uppercase tracking-widest mb-4 leading-none font-bold">
+                                                <div className="flex items-center gap-2 text-[10px] text-emerald-600 font-black uppercase tracking-widest mb-4 leading-none">
                                                     <Icon name="MapPin" className="w-3 h-3" /> {d.city}
                                                 </div>
                                                 <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed font-bold">{d.desc}</p>
@@ -430,8 +415,8 @@
                         {/* VIEW: DAY DETAIL */}
                         {view === 'day-detail' && selectedDay !== null && (
                             <div className="fade-in pb-24">
-                                <button onClick={() => setView('itinerary')} className="mb-10 font-black text-emerald-800 text-[11px] tracking-widest uppercase flex items-center gap-3 hover:translate-x-[-5px] transition-all font-black">
-                                    <div className="w-8 h-8 rounded-full border-2 border-emerald-800 flex items-center justify-center transition-all shadow-sm font-black"><Icon name="ArrowLeft" /></div> BACK TO LOGS
+                                <button onClick={() => setView('itinerary')} className="mb-10 font-black text-emerald-800 text-[11px] tracking-widest uppercase flex items-center gap-3 hover:translate-x-[-5px] transition-all">
+                                    <div className="w-8 h-8 rounded-full border-2 border-emerald-800 flex items-center justify-center transition-all shadow-sm"><Icon name="ArrowLeft" /></div> BACK TO LOGS
                                 </button>
                                 <header className="detail-header relative h-[65vh] rounded-[3.5rem] md:rounded-[4.5rem] overflow-hidden shadow-2xl mb-16 border-4 border-white shadow-emerald-900/10 bg-slate-200">
                                     <img src={ITINERARY_DATA[selectedDay].img} className="w-full h-full object-cover" />
@@ -440,8 +425,8 @@
                                         <span className="text-[11px] font-black uppercase bg-emerald-600 px-5 py-2 rounded-full mb-6 inline-block tracking-[0.4em] shadow-lg shadow-emerald-950/20 font-bold">Expedition Phase {ITINERARY_DATA[selectedDay].day}</span>
                                         <h2 className="hero-title text-4xl sm:text-6xl md:text-8xl font-black mb-6 leading-tight tracking-tighter">{ITINERARY_DATA[selectedDay].title}</h2>
                                         <div className="flex flex-wrap items-center gap-8 text-lg sm:text-3xl serif italic opacity-95 tracking-tight">
-                                            <span className="flex items-center gap-3 font-bold font-bold"><Icon name="MapPin" className="w-7 h-7 text-emerald-400" /> {ITINERARY_DATA[selectedDay].city}</span>
-                                            <span className="flex items-center gap-3 font-bold font-bold"><Icon name="Calendar" className="w-7 h-7 text-emerald-400" /> {ITINERARY_DATA[selectedDay].date}</span>
+                                            <span className="flex items-center gap-3 font-bold"><Icon name="MapPin" className="w-7 h-7 text-emerald-400" /> {ITINERARY_DATA[selectedDay].city}</span>
+                                            <span className="flex items-center gap-3 font-bold"><Icon name="Calendar" className="w-7 h-7 text-emerald-400" /> {ITINERARY_DATA[selectedDay].date}</span>
                                         </div>
                                     </div>
                                 </header>
@@ -450,32 +435,32 @@
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
                                             <WeatherTile city={ITINERARY_DATA[selectedDay].city} coords={ITINERARY_DATA[selectedDay].coords} />
                                             <div className="reddit-quote font-black text-base leading-relaxed italic border-emerald-200 shadow-sm">
-                                                <p className="text-[10px] font-black uppercase text-[#ff4500] tracking-[0.2em] mb-3 leading-none flex items-center gap-2 font-black font-bold">Community Insights</p>
+                                                <p className="text-[10px] font-black uppercase text-[#ff4500] tracking-[0.2em] mb-3 leading-none flex items-center gap-2 font-bold">Community Insights</p>
                                                 "{ITINERARY_DATA[selectedDay].reddit}"
                                             </div>
                                         </div>
 
                                         <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                            <div className="research-pill"><h5 className="text-[10px] font-black uppercase text-emerald-600 mb-2 leading-none font-bold font-bold">Cool Shop</h5><h6 className="font-bold text-slate-900 text-xl tracking-tight mb-2 leading-tight">{ITINERARY_DATA[selectedDay].hiddenShop}</h6><p className="text-sm text-slate-500 font-bold font-bold leading-relaxed">{ITINERARY_DATA[selectedDay].shopDesc}</p></div>
-                                            <div className="research-pill"><h5 className="text-[10px] font-black uppercase text-emerald-600 mb-2 leading-none font-bold font-bold">Heritage</h5><h6 className="font-bold text-slate-900 text-xl tracking-tight mb-2 leading-tight">{ITINERARY_DATA[selectedDay].hiddenBuilding}</h6><p className="text-sm text-slate-500 font-bold font-bold leading-relaxed">{ITINERARY_DATA[selectedDay].buildingDesc}</p></div>
+                                            <div className="research-pill"><h5 className="text-[10px] font-black uppercase text-emerald-600 mb-2 leading-none font-bold">Cool Shop</h5><h6 className="font-bold text-slate-900 text-xl tracking-tight mb-2 leading-tight">{ITINERARY_DATA[selectedDay].hiddenShop}</h6><p className="text-sm text-slate-500 font-bold leading-relaxed">{ITINERARY_DATA[selectedDay].shopDesc}</p></div>
+                                            <div className="research-pill"><h5 className="text-[10px] font-black uppercase text-emerald-600 mb-2 leading-none font-bold">Heritage</h5><h6 className="font-bold text-slate-900 text-xl tracking-tight mb-2 leading-tight">{ITINERARY_DATA[selectedDay].hiddenBuilding}</h6><p className="text-sm text-slate-500 font-bold leading-relaxed">{ITINERARY_DATA[selectedDay].buildingDesc}</p></div>
                                         </section>
 
                                         <section className="bg-emerald-900 text-white p-12 rounded-[4rem] shadow-2xl relative overflow-hidden">
                                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-emerald-800 pb-10 gap-6">
                                               <div>
                                                 <h3 className="text-4xl font-black mb-1 tracking-tight text-white">{ITINERARY_DATA[selectedDay].hike}</h3>
-                                                <p className="text-emerald-400 text-[11px] font-black uppercase tracking-[0.3em] leading-none font-bold font-bold">Priority Objective</p>
+                                                <p className="text-emerald-400 text-[11px] font-black uppercase tracking-[0.3em] leading-none font-bold">Priority Objective</p>
                                               </div>
-                                              {ITINERARY_DATA[selectedDay].hikeLink !== '#' && (<a href={ITINERARY_DATA[selectedDay].hikeLink} target="_blank" className="bg-white text-emerald-900 px-10 py-4 rounded-2xl text-[11px] font-black uppercase shadow-2xl hover:bg-emerald-50 transition-all font-bold font-bold">AllTrails Intel</a>)}
+                                              {ITINERARY_DATA[selectedDay].hikeLink !== '#' && (<a href={ITINERARY_DATA[selectedDay].hikeLink} target="_blank" className="bg-white text-emerald-900 px-10 py-4 rounded-2xl text-[11px] font-black uppercase shadow-2xl hover:bg-emerald-50 transition-all font-bold">AllTrails Intel</a>)}
                                             </div>
-                                            <p className="text-2xl opacity-90 italic serif leading-relaxed text-emerald-50 mt-10">"{ITINERARY_DATA[selectedDay].desc}"</p>
+                                            <p className="text-2xl opacity-90 italic serif leading-relaxed text-emerald-50 mt-10 font-bold italic">"{ITINERARY_DATA[selectedDay].desc}"</p>
                                         </section>
                                     </div>
-                                    <div className="space-y-8 font-black font-black">
-                                        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4 font-bold">
-                                            <h4 className="font-black text-slate-900 uppercase text-[10px] tracking-widest border-b pb-4 flex items-center gap-3 tracking-tighter leading-none font-bold"><Icon name="Info" className="text-emerald-600 font-bold" /> Expedition Brief</h4>
-                                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-tighter mb-1 leading-none font-bold">Est. Daily Budget</p>
-                                            <p className="text-xl font-black text-slate-900 tracking-tight leading-none italic font-bold">{ITINERARY_DATA[selectedDay].cost}</p>
+                                    <div className="space-y-8 font-black">
+                                        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-4">
+                                            <h4 className="font-black text-slate-900 uppercase text-[10px] tracking-widest border-b pb-4 flex items-center gap-3"><Icon name="Info" className="text-emerald-600 font-bold" /> Expedition Brief</h4>
+                                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-tighter mb-1 leading-none font-black">Est. Daily Budget</p>
+                                            <p className="text-xl font-black text-slate-900 tracking-tight leading-none italic font-black">{ITINERARY_DATA[selectedDay].cost}</p>
                                         </div>
                                         <LogStream dayNum={ITINERARY_DATA[selectedDay].day} activeUser={activeUser} db={db} user={user} onUserToggle={changeUser} />
                                     </div>
@@ -483,7 +468,7 @@
                             </div>
                         )}
                     </main>
-                    <footer className="mt-24 border-t border-slate-100 py-20 px-8 text-center text-slate-400 text-[11px] font-black uppercase tracking-[0.6em] font-bold">&copy; 2026 Cliffs, Craic & Carbs Trio Expedition</footer>
+                    <footer className="mt-24 border-t border-slate-100 py-20 px-8 text-center text-slate-400 text-[11px] font-black uppercase tracking-[0.6em] font-black">&copy; 2026 Cliffs, Craic & Carbs Trio Expedition</footer>
                 </div>
             );
         };
